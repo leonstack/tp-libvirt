@@ -3,7 +3,9 @@ import os
 import logging
 from autotest.client.shared import error
 from autotest.client import utils
-from virttest import virsh, utils_libvirtd
+from virttest import virsh
+from virttest import utils_libvirtd
+from virttest.libvirt_xml import vm_xml
 
 
 def run(test, params, env):
@@ -18,8 +20,7 @@ def run(test, params, env):
     5.Confirm the test result.
     """
     vm_name = params.get("main_vm")
-    vm = env.get_vm(params["main_vm"])
-    vm.verify_alive()
+    vm = env.get_vm(vm_name)
 
     def buildcmd(arglist):
         """
@@ -149,6 +150,15 @@ def run(test, params, env):
     extra_param = params.get("dtn_extra_param")
     libvirtd = params.get("libvirtd")
     status_error = params.get("status_error")
+    xml_bak = vm_xml.VMXML.new_from_inactive_dumpxml(vm_name)
+    is_alive = vm.is_alive()
+    vmxml = xml_bak.copy()
+    if not len(vmxml.get_graphics_devices("vnc")):
+        graphic = vmxml.get_device_class('graphics')()
+        graphic.del_graphic(vm_name)
+    if is_alive and vm.is_dead():
+        vm.start()
+    vm.verify_alive()
     virsh.dumpxml(vm_name, extra="", to_file=file_xml)
     if libvirtd == "off":
         utils_libvirtd.libvirtd_stop()
@@ -162,6 +172,7 @@ def run(test, params, env):
         utils_libvirtd.libvirtd_start()
 
     # clean up
+    xml_bak.sync()
     if os.path.exists(file_xml):
         os.remove(file_xml)
 
